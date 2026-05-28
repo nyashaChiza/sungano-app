@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "Sungano",
+    "slug": "sungano",
+    "version": "1.0.0",
+    "sdkVersion": "54.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#1A7A4A"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#1A7A4A"
+      },
+      "package": "com.sungano.app"
+    },
+    "ios": {
+      "bundleIdentifier": "com.sungano.app"
+    },
+    "scheme": "sungano",
+    "plugins": ["expo-router"]
+  }
+}
