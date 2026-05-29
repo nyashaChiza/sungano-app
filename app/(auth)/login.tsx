@@ -8,42 +8,53 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors, Fonts, Spacing, Radius, Shadow } from '../../src/constants/theme';
+import { router } from 'expo-router';
+import { Colors, Fonts, Spacing, Radius } from '../../src/constants/theme';
 import SunganoMark from '../../src/components/brand/SunganoMark';
 import SunganoWordmark from '../../src/components/brand/SunganoWordmark';
 import Button from '../../src/components/ui/Button';
 import { useAuth } from '../../src/hooks/useAuth';
+import { toast } from '../../src/utils/toast';
 
 interface LoginScreenProps {
-  onLoginSuccess: () => void;
+  onLoginSuccess?: () => void;
   onRegister?: () => void;
 }
 
 export default function LoginScreen({ onLoginSuccess, onRegister }: LoginScreenProps) {
-  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const { login, isLoading } = useAuth();
 
   const handleLogin = async () => {
-    if (!phone.trim()) {
-      Alert.alert('Error', 'Please enter your phone number.');
+    if (!email.trim()) {
+      toast.error('Please enter your email address.', 'Missing email');
+      return;
+    }
+    if (!password) {
+      toast.error('Please enter your password.', 'Missing password');
       return;
     }
     try {
-      await login(phone, password);
-      onLoginSuccess();
+      await login(email.trim(), password);
+      onLoginSuccess?.();
     } catch {
-      Alert.alert('Login Failed', 'Invalid phone number or password.');
+      toast.error('Invalid email or password.', 'Login failed');
     }
   };
 
-  const handleDemoLogin = async () => {
-    await login('+234 801 234 5678', 'demo123');
-    onLoginSuccess();
+  const handleForgotPassword = () => {
+    router.push('/(auth)/forgot-password');
+  };
+
+  const handleRegister = () => {
+    if (onRegister) {
+      onRegister();
+    } else {
+      router.push('/(auth)/register');
+    }
   };
 
   return (
@@ -67,15 +78,16 @@ export default function LoginScreen({ onLoginSuccess, onRegister }: LoginScreenP
           <Text style={styles.welcomeSub}>Sign in to your account</Text>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Phone number</Text>
+            <Text style={styles.inputLabel}>Email address</Text>
             <TextInput
-              value={phone}
-              onChangeText={setPhone}
-              keyboardType="phone-pad"
-              placeholder="+234 801 234 5678"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              placeholder="you@example.com"
               placeholderTextColor={Colors.textLight}
               style={styles.input}
-              autoComplete="tel"
+              autoComplete="email"
+              autoCapitalize="none"
             />
           </View>
 
@@ -100,7 +112,7 @@ export default function LoginScreen({ onLoginSuccess, onRegister }: LoginScreenP
             </View>
           </View>
 
-          <TouchableOpacity style={styles.forgotBtn}>
+          <TouchableOpacity style={styles.forgotBtn} onPress={handleForgotPassword}>
             <Text style={styles.forgotText}>Forgot password?</Text>
           </TouchableOpacity>
 
@@ -113,17 +125,9 @@ export default function LoginScreen({ onLoginSuccess, onRegister }: LoginScreenP
             style={styles.loginBtn}
           />
 
-          <Button
-            label="Try Demo Account"
-            onPress={handleDemoLogin}
-            variant="secondary"
-            fullWidth
-            size="md"
-          />
-
           <View style={styles.registerRow}>
             <Text style={styles.registerPrompt}>Don't have an account? </Text>
-            <TouchableOpacity onPress={onRegister}>
+            <TouchableOpacity onPress={handleRegister}>
               <Text style={styles.registerLink}>Create one</Text>
             </TouchableOpacity>
           </View>

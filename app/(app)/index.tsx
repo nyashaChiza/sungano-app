@@ -1,18 +1,12 @@
 import React from 'react';
-import { View } from 'react-native';
-import HomeScreen from '../../src/screens/HomeScreen';
-import { useAuth } from '../../src/hooks/useAuth';
+import { Redirect } from 'expo-router';
+import { useAuthStore } from '../../src/store/authStore';
 
-export default function HomeTab() {
-  const { user } = useAuth();
-  if (!user) return null;
-  return (
-    <HomeScreen
-      user={user}
-      onRoundPress={() => {}}
-      onGoalPress={() => {}}
-      onCreatePress={() => {}}
-      onTrustPress={() => {}}
-    />
-  );
+// This route is rendered by expo-router when (app) stack is shown.
+// Actual navigation is handled by AppNavigator in app/index.tsx.
+// Just redirect back to root so AppNavigator takes over.
+export default function AppIndex() {
+  const { user } = useAuthStore();
+  if (!user) return <Redirect href="/(auth)/login" />;
+  return <Redirect href="/" />;
 }

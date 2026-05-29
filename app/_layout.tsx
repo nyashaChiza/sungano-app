@@ -1,5 +1,4 @@
-import React, { useEffect, useState } from 'react';
-import { View, StyleSheet } from 'react-native';
+import React, { useEffect } from 'react';
 import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';
 import {
@@ -16,13 +15,13 @@ import {
 } from '@expo-google-fonts/jetbrains-mono';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { Colors } from '../src/constants/theme';
-import AppEntry from './index';
+import { Slot } from 'expo-router';
+import Toast from 'react-native-toast-message';
 
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     Fraunces_700Bold,
     Fraunces_600SemiBold,
     DMSans_400Regular,
@@ -32,19 +31,20 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
-    if (fontsLoaded) {
+    if (fontsLoaded || fontError) {
       SplashScreen.hideAsync();
     }
-  }, [fontsLoaded]);
+  }, [fontsLoaded, fontError]);
 
-  if (!fontsLoaded) {
+  if (!fontsLoaded && !fontError) {
     return null;
   }
 
   return (
     <SafeAreaProvider>
       <StatusBar style="light" />
-      <AppEntry />
+      <Slot />
+      <Toast />
     </SafeAreaProvider>
   );
 }

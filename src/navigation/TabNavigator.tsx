@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Colors, Fonts, Spacing, Radius } from '../constants/theme';
+import { HomeIcon, RoundsIcon, GoalsIcon, YouIcon } from '../components/icons/TabIcons';
 
 export type TabName = 'home' | 'rounds' | 'goals' | 'profile';
 
@@ -9,18 +10,28 @@ interface TabBarProps {
   onTabPress: (tab: TabName) => void;
 }
 
-const TABS: Array<{ name: TabName; label: string; emoji: string }> = [
-  { name: 'home', label: 'Home', emoji: '🏠' },
-  { name: 'rounds', label: 'Rounds', emoji: '🔄' },
-  { name: 'goals', label: 'Goals', emoji: '🎯' },
-  { name: 'profile', label: 'You', emoji: '👤' },
+const TABS: Array<{ name: TabName; label: string }> = [
+  { name: 'home',    label: 'Home' },
+  { name: 'rounds',  label: 'Rounds' },
+  { name: 'goals',   label: 'Goals' },
+  { name: 'profile', label: 'You' },
 ];
+
+function TabIcon({ name, color, focused }: { name: TabName; color: string; focused: boolean }) {
+  switch (name) {
+    case 'home':    return <HomeIcon   color={color} size={24} focused={focused} />;
+    case 'rounds':  return <RoundsIcon color={color} size={24} focused={focused} />;
+    case 'goals':   return <GoalsIcon  color={color} size={24} focused={focused} />;
+    case 'profile': return <YouIcon    color={color} size={24} focused={focused} />;
+  }
+}
 
 export default function TabBar({ activeTab, onTabPress }: TabBarProps) {
   return (
     <View style={styles.container}>
       {TABS.map(tab => {
         const isActive = activeTab === tab.name;
+        const color = isActive ? Colors.greenDeep : Colors.textLight;
         return (
           <TouchableOpacity
             key={tab.name}
@@ -29,7 +40,7 @@ export default function TabBar({ activeTab, onTabPress }: TabBarProps) {
             activeOpacity={0.7}
           >
             <View style={[styles.tabInner, isActive && styles.tabInnerActive]}>
-              <Text style={styles.tabEmoji}>{tab.emoji}</Text>
+              <TabIcon name={tab.name} color={color} focused={isActive} />
               <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>
                 {tab.label}
               </Text>
@@ -64,9 +75,6 @@ const styles = StyleSheet.create({
   },
   tabInnerActive: {
     backgroundColor: Colors.greenPale,
-  },
-  tabEmoji: {
-    fontSize: 20,
   },
   tabLabel: {
     fontFamily: Fonts.bodyRegular,

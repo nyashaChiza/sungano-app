@@ -3,6 +3,7 @@ import { View, StyleSheet } from 'react-native';
 import { Colors } from '../constants/theme';
 import TabBar, { TabName } from './TabNavigator';
 import HomeScreen from '../screens/HomeScreen';
+import RoundsScreen from '../screens/RoundsScreen';
 import RoundDetailScreen from '../screens/RoundDetailScreen';
 import TrustScoreScreen from '../screens/TrustScoreScreen';
 import ProofUploadScreen from '../screens/ProofUploadScreen';
@@ -51,18 +52,6 @@ export default function AppNavigator({ user }: AppNavigatorProps) {
   const renderScreen = () => {
     switch (currentScreen.name) {
       case 'home':
-      case 'rounds':
-        if (currentScreen.name === 'home') {
-          return (
-            <HomeScreen
-              user={user}
-              onRoundPress={id => push({ name: 'roundDetail', roundId: id })}
-              onGoalPress={id => push({ name: 'goalDetail', goalId: id })}
-              onCreatePress={() => push({ name: 'createGoal' })}
-              onTrustPress={() => push({ name: 'trustScore' })}
-            />
-          );
-        }
         return (
           <HomeScreen
             user={user}
@@ -73,10 +62,17 @@ export default function AppNavigator({ user }: AppNavigatorProps) {
           />
         );
 
+      case 'rounds':
+        return (
+          <RoundsScreen
+            onRoundPress={id => push({ name: 'roundDetail', roundId: id })}
+            onCreatePress={() => {}}
+          />
+        );
+
       case 'goals':
         return (
           <GoalsHubScreen
-            goals={goals}
             onGoalPress={id => push({ name: 'goalDetail', goalId: id })}
             onCreateGoal={() => push({ name: 'createGoal' })}
           />

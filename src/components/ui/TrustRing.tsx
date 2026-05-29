@@ -8,6 +8,7 @@ interface TrustRingProps {
   size?: number;
   strokeWidth?: number;
   showLabel?: boolean;
+  dark?: boolean;
 }
 
 function getScoreColor(score: number): string {
@@ -32,12 +33,15 @@ export default function TrustRing({
   size = 80,
   strokeWidth = 6,
   showLabel = false,
+  dark = false,
 }: TrustRingProps) {
   const animatedValue = useRef(new Animated.Value(0)).current;
   const radius = (size - strokeWidth * 2) / 2;
   const circumference = 2 * Math.PI * radius;
   const scoreColor = getScoreColor(score);
   const tierLabel = getTierLabel(score);
+  const trackColor = dark ? 'rgba(255,255,255,0.15)' : Colors.greenPale;
+  const textColor = dark ? Colors.white : scoreColor;
 
   useEffect(() => {
     Animated.timing(animatedValue, {
@@ -63,7 +67,7 @@ export default function TrustRing({
           cy={cy}
           r={radius}
           fill="none"
-          stroke={Colors.greenPale}
+          stroke={trackColor}
           strokeWidth={strokeWidth}
         />
         <AnimatedCircle
@@ -80,7 +84,7 @@ export default function TrustRing({
         />
       </Svg>
       <View style={[styles.center, { width: size, height: size }]}>
-        <Text style={[styles.score, { color: scoreColor, fontSize: size * 0.28 }]}>{score}</Text>
+        <Text style={[styles.score, { color: textColor, fontSize: size * 0.28 }]}>{score}</Text>
         {showLabel && (
           <Text style={[styles.tier, { fontSize: size * 0.13 }]}>{tierLabel}</Text>
         )}

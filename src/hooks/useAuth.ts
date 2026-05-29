@@ -1,79 +1,109 @@
-import { useState, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useAuthStore } from '../store/authStore';
+import { authService } from '../services/authService';
+import { notificationService } from '../services/notificationService';
+import api from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { User, AuthState } from '../types';
-
-const AUTH_TOKEN_KEY = '@sungano/auth_token';
-const AUTH_USER_KEY = '@sungano/auth_user';
-
-const MOCK_USER: User = {
-  id: 'user-1',
-  name: 'Amara Nwosu',
-  phone: '+234 801 234 5678',
-  email: 'amara@example.com',
-  createdAt: '2024-01-15T00:00:00Z',
-  trustScore: {
-    score: 87,
-    tier: 'gold',
-    onTimePayments: 23,
-    totalPayments: 25,
-    defaultCount: 0,
-    lateCount: 2,
-    history: [
-      { date: '2024-12-01', score: 87, event: 'On-time payment', delta: 1 },
-      { date: '2024-11-01', score: 86, event: 'On-time payment', delta: 1 },
-      { date: '2024-10-15', score: 85, event: 'Late payment', delta: -2 },
-      { date: '2024-10-01', score: 87, event: 'On-time payment', delta: 1 },
-    ],
-  },
-};
 
 export function useAuth() {
-  const [authState, setAuthState] = useState<AuthState>({
-    user: MOCK_USER,
-    token: 'mock-token-123',
-    isAuthenticated: true,
-    isLoading: false,
-  });
+  const { user, token, isLoading, setAuth, loadAuth, logout: storeLogout } = useAuthStore();
+  const [isInitialized, setIsInitialized] = useState(false);
 
-  const login = useCallback(async (phone: string, _password: string): Promise<void> => {
-    setAuthState(prev => ({ ...prev, isLoading: true }));
-    await new Promise(r => setTimeout(r, 1000));
-    const token = 'mock-token-' + Date.now();
-    await AsyncStorage.setItem(AUTH_TOKEN_KEY, token);
-    await AsyncStorage.setItem(AUTH_USER_KEY, JSON.stringify(MOCK_USER));
-    setAuthState({
-      user: MOCK_USER,
-      token,
-      isAuthenticated: true,
-      isLoading: false,
-    });
-  }, []);
-
-  const register = useCallback(async (name: string, phone: string, _password: string): Promise<void> => {
-    setAuthState(prev => ({ ...prev, isLoading: true }));
-    await new Promise(r => setTimeout(r, 1200));
-    const newUser: User = {
-      ...MOCK_USER,
-      id: 'user-new-' + Date.now(),
-      name,
-      phone,
+  // Load auth on mount
+  useEffect(() => {
+    const initAuth = async () => {
+      await loadAuth();
+      setIsInitialized(true);
     };
-    const token = 'mock-token-' + Date.now();
-    await AsyncStorage.setItem(AUTH_TOKEN_KEY, token);
-    await AsyncStorage.setItem(AUTH_USER_KEY, JSON.stringify(newUser));
-    setAuthState({
-      user: newUser,
-      token,
-      isAuthenticated: true,
-      isLoading: false,
-    });
-  }, []);
+    initAuth();
+  }, [loadAuth]);
 
-  const logout = useCallback(async (): Promise<void> => {
-    await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
-    await AsyncStorage.removeItem(AUTH_USER_KEY);
-    setAuthState({ user: null, token: null, isAuthenticated: false, isLoading: false });
-  }, []);
+  const register = useCallback(
+    async (full_name: string, email: string, phone: string, password: string) => {
+      try {
+        const body = await authService.register(full_name, email, phone, password);
+        const registerData = body?.data ?? body;
+        if (registerData?.user && registerData?.access_token) {
+          setAuth(registerData.user, registerData.access_token, registerData.refresh_token);
+          if (registerData.user?.id) {
+            await notificationService.registerForPushNotifications(registerData.user.id);
+          }
+        }
+        return registerData;
+      } catch (error) {
+        throw error;
+      }
+    },
+    [setAuth]
+  );
 
-  return { ...authState, login, register, logout };
+  const login = useCallback(
+    async (email: string, password: string) => {
+      const body = await authService.login(email, password);
+      // Handle both { data: { user, access_token } } and { user, access_token }
+      const loginData = body?.data ?? body;
+      const accessToken: string = loginData?.access_token ?? loginData?.token;
+      const refreshToken: string = loginData?.refresh_token ?? '';
+
+      if (!accessToken) throw new Error('No access token in login response');
+
+      // Persist tokens so the /users/me request can attach the header
+      await AsyncStorage.setItem('access_token', accessToken);
+      if (refreshToken) await AsyncStorage.setItem('refresh_token', refreshToken);
+
+      // Prefer user from login response; fall back to fetching from /users/me
+      let userData = loginData?.user;
+      if (!userData) {
+        const res = await api.get('/users/me');
+        userData = res.data?.data ?? res.data;
+      }
+
+      setAuth(userData, accessToken, refreshToken);
+      notificationService.setupNotificationHandlers();
+      notificationService.registerForPushNotifications(userData?.id ?? '');
+      return userData;
+    },
+    [setAuth]
+  );
+
+  const logout = useCallback(async () => {
+    await storeLogout();
+  }, [storeLogout]);
+
+  const verifyPhone = useCallback(async (token: string) => {
+    try {
+      const response = await authService.verifyPhone(token);
+      if (response.data) {
+        setAuth(response.data.user, response.data.access_token, response.data.refresh_token);
+      }
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  }, [setAuth]);
+
+  const verifyEmail = useCallback(async (token: string) => {
+    try {
+      const response = await authService.verifyEmail(token);
+      if (response.data) {
+        setAuth(response.data.user, response.data.access_token, response.data.refresh_token);
+      }
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  }, [setAuth]);
+
+  return {
+    user,
+    token,
+    isAuthenticated: !!token && !!user,
+    isLoading,
+    isInitialized,
+    login,
+    register,
+    logout,
+    verifyPhone,
+    verifyEmail,
+  };
 }

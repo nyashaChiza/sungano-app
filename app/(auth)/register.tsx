@@ -8,8 +8,9 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Alert,
 } from 'react-native';
+import { router } from 'expo-router';
+import { toast } from '../../src/utils/toast';
 import { Colors, Fonts, Spacing, Radius } from '../../src/constants/theme';
 import SunganoMark from '../../src/components/brand/SunganoMark';
 import SunganoWordmark from '../../src/components/brand/SunganoWordmark';
@@ -17,12 +18,13 @@ import Button from '../../src/components/ui/Button';
 import { useAuth } from '../../src/hooks/useAuth';
 
 interface RegisterScreenProps {
-  onRegisterSuccess: () => void;
+  onRegisterSuccess?: () => void;
   onLogin?: () => void;
 }
 
 export default function RegisterScreen({ onRegisterSuccess, onLogin }: RegisterScreenProps) {
   const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -30,23 +32,36 @@ export default function RegisterScreen({ onRegisterSuccess, onLogin }: RegisterS
   const { register, isLoading } = useAuth();
 
   const handleRegister = async () => {
-    if (!name.trim() || !phone.trim() || !password) {
-      Alert.alert('Error', 'Please fill in all required fields.');
+    if (!name.trim() || !email.trim() || !phone.trim() || !password) {
+      toast.error('Please fill in all required fields.');
       return;
     }
     if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match.');
+      toast.error('Passwords do not match.');
       return;
     }
     if (!agreed) {
-      Alert.alert('Error', 'Please agree to the Terms of Service.');
+      toast.error('Please agree to the Terms of Service.');
       return;
     }
     try {
-      await register(name, phone, password);
-      onRegisterSuccess();
+      await register(name, email, phone, password);
+      if (onRegisterSuccess) {
+        onRegisterSuccess();
+      } else {
+        toast.success('Your account has been created. Please sign in.', 'Account created');
+        setTimeout(() => router.replace('/(auth)/login'), 1500);
+      }
     } catch {
-      Alert.alert('Registration Failed', 'Unable to create account. Please try again.');
+      toast.error('Unable to create account. Please try again.', 'Registration failed');
+    }
+  };
+
+  const handleSignIn = () => {
+    if (onLogin) {
+      onLogin();
+    } else {
+      router.back();
     }
   };
 
@@ -78,6 +93,20 @@ export default function RegisterScreen({ onRegisterSuccess, onLogin }: RegisterS
               placeholderTextColor={Colors.textLight}
               style={styles.input}
               autoComplete="name"
+            />
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Email address</Text>
+            <TextInput
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              placeholder="you@example.com"
+              placeholderTextColor={Colors.textLight}
+              style={styles.input}
+              autoComplete="email"
+              autoCapitalize="none"
             />
           </View>
 
@@ -145,7 +174,7 @@ export default function RegisterScreen({ onRegisterSuccess, onLogin }: RegisterS
 
           <View style={styles.loginRow}>
             <Text style={styles.loginPrompt}>Already have an account? </Text>
-            <TouchableOpacity onPress={onLogin}>
+            <TouchableOpacity onPress={handleSignIn}>
               <Text style={styles.loginLink}>Sign in</Text>
             </TouchableOpacity>
           </View>

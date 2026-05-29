@@ -1,22 +1,7 @@
-import React from 'react';
-import { View, StyleSheet } from 'react-native';
-import { Colors } from '../../src/constants/theme';
+import { Stack } from 'expo-router';
 
-interface AppLayoutProps {
-  children: React.ReactNode;
-}
-
-export default function AppLayout({ children }: AppLayoutProps) {
+export default function AppLayout() {
   return (
-    <View style={styles.container}>
-      {children}
-    </View>
+    <Stack screenOptions={{ headerShown: false }} />
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.bgLight,
-  },
-});

@@ -10,9 +10,12 @@ import {
   Platform,
   Alert,
 } from 'react-native';
+import Svg, { Path, Circle, Rect } from 'react-native-svg';
+import { Colors as C } from '../../constants/theme';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GoalType, DepositFrequency } from '../../types';
 import { Colors, Fonts, Spacing, Radius, Shadow } from '../../constants/theme';
+// C alias used inside JSX for SVG stroke colors (avoids name clash with the StyleSheet Colors reference)
 import Button from '../../components/ui/Button';
 import SplitBar from '../../components/goals/SplitBar';
 import Money from '../../components/ui/Money';
@@ -37,7 +40,7 @@ interface CreateGoalData {
   splits?: Record<string, number>;
 }
 
-const EMOJIS = ['🏠', '✈️', '💻', '🚗', '🎓', '💍', '🏋️', '🎯', '💰', '🛍️', '🏖️', '📱'];
+const GOAL_INITIALS = ['H', 'T', 'L', 'C', 'E', 'F', 'G', 'S', 'M', 'B', 'R', 'W'];
 const FREQUENCIES: DepositFrequency[] = ['daily', 'weekly', 'biweekly', 'monthly'];
 
 const STEP_TITLES = [
@@ -55,7 +58,7 @@ export default function CreateGoalFlow({ onBack, onComplete }: CreateGoalFlowPro
 
   const [goalType, setGoalType] = useState<GoalType>('solo');
   const [name, setName] = useState('');
-  const [emoji, setEmoji] = useState('🎯');
+  const [emoji, setEmoji] = useState('S');
   const [targetAmountText, setTargetAmountText] = useState('');
   const [targetDate, setTargetDate] = useState('');
   const [frequency, setFrequency] = useState<DepositFrequency>('monthly');
@@ -149,18 +152,26 @@ export default function CreateGoalFlow({ onBack, onComplete }: CreateGoalFlowPro
                 style={[styles.typeCard, goalType === 'solo' && styles.typeCardSelected]}
                 activeOpacity={0.85}
               >
-                <Text style={styles.typeCardEmoji}>👤</Text>
-                <Text style={[styles.typeCardTitle, goalType === 'solo' && styles.typeCardTitleSelected]}>Solo</Text>
-                <Text style={styles.typeCardDesc}>Save by yourself with your own schedule and targets.</Text>
+                <Svg width={36} height={36} viewBox="0 0 24 24" fill="none" style={styles.typeCardIcon}>
+                  <Circle cx={12} cy={8} r={4} stroke={goalType === 'solo' ? C.greenDeep : C.textMed} strokeWidth={1.8} />
+                  <Path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke={goalType === 'solo' ? C.greenDeep : C.textMed} strokeWidth={1.8} strokeLinecap="round" />
+                </Svg>
+                <Text style={[styles.typeCardTitle, goalType === 'solo' && styles.typeCardTitleSelected]}>Solo Goal</Text>
+                <Text style={styles.typeCardDesc}>Save on your own toward a personal target. Track your deposits and stay on schedule.</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => setGoalType('group')}
                 style={[styles.typeCard, goalType === 'group' && styles.typeCardSelected]}
                 activeOpacity={0.85}
               >
-                <Text style={styles.typeCardEmoji}>👥</Text>
-                <Text style={[styles.typeCardTitle, goalType === 'group' && styles.typeCardTitleSelected]}>Group</Text>
-                <Text style={styles.typeCardDesc}>Invite others to save towards a shared target together.</Text>
+                <Svg width={36} height={36} viewBox="0 0 24 24" fill="none" style={styles.typeCardIcon}>
+                  <Circle cx={9} cy={8} r={3.5} stroke={goalType === 'group' ? C.greenDeep : C.textMed} strokeWidth={1.8} />
+                  <Path d="M3 20c0-3.3 2.7-6 6-6" stroke={goalType === 'group' ? C.greenDeep : C.textMed} strokeWidth={1.8} strokeLinecap="round" />
+                  <Circle cx={17} cy={8} r={3.5} stroke={goalType === 'group' ? C.greenDeep : C.textMed} strokeWidth={1.8} />
+                  <Path d="M13 20c0-3.3 2.7-6 6-6" stroke={goalType === 'group' ? C.greenDeep : C.textMed} strokeWidth={1.8} strokeLinecap="round" />
+                </Svg>
+                <Text style={[styles.typeCardTitle, goalType === 'group' && styles.typeCardTitleSelected]}>Group Goal</Text>
+                <Text style={styles.typeCardDesc}>Save together toward a shared target. Split the amount and track everyone's progress.</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -172,13 +183,13 @@ export default function CreateGoalFlow({ onBack, onComplete }: CreateGoalFlowPro
             <Text style={styles.stepHeading}>Name your goal</Text>
             <Text style={styles.stepSub}>Give your goal a name and pick an icon.</Text>
             <View style={styles.emojiGrid}>
-              {EMOJIS.map(e => (
+              {GOAL_INITIALS.map(l => (
                 <TouchableOpacity
-                  key={e}
-                  onPress={() => setEmoji(e)}
-                  style={[styles.emojiBtn, emoji === e && styles.emojiBtnSelected]}
+                  key={l}
+                  onPress={() => setEmoji(l)}
+                  style={[styles.emojiBtn, emoji === l && styles.emojiBtnSelected]}
                 >
-                  <Text style={styles.emojiText}>{e}</Text>
+                  <Text style={[styles.emojiText, emoji === l && { color: Colors.greenDeep }]}>{l}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -505,8 +516,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.greenDeep,
     backgroundColor: Colors.greenPale,
   },
-  typeCardEmoji: {
-    fontSize: 32,
+  typeCardIcon: {
     marginBottom: 4,
   },
   typeCardTitle: {
