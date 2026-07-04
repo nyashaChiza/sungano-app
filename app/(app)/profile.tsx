@@ -11,8 +11,8 @@ import {
 import { useAuth } from '../../src/hooks/useAuth';
 import { useRouter } from 'expo-router';
 import { Colors, Fonts, Spacing, Radius, Shadow } from '../../src/constants/theme';
-import { Avatar } from '../../src/components/ui/Avatar';
-import { TrustRing } from '../../src/components/ui/TrustRing';
+import Avatar from '../../src/components/ui/Avatar';
+import TrustRing from '../../src/components/ui/TrustRing';
 import Button from '../../src/components/ui/Button';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -41,7 +41,7 @@ export default function ProfileTab() {
         {/* Profile Section */}
         <View style={[styles.card, styles.profileCard]}>
           <View style={styles.profileHeader}>
-            <Avatar size={80} name={user.full_name} photoUrl={user.profile_photo_url} />
+            <Avatar size={80} name={user.full_name} avatarUrl={user.profile_photo_url} />
             <View style={styles.profileInfo}>
               <Text style={styles.profileName}>{user.full_name}</Text>
               <Text style={styles.profileEmail}>{user.email}</Text>

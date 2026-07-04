@@ -1,102 +1,126 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { Round, PaymentStatus, RoundStatus } from '../../types';
+import { Round } from '../../store/roundsStore';
 import { Colors, Fonts, Shadow, Radius, Spacing } from '../../constants/theme';
-import StatusBadge from '../ui/StatusBadge';
 
 interface RoundCardProps {
   round: Round;
   onPress: () => void;
 }
 
-function getAccentColor(status: RoundStatus): string {
-  switch (status) {
-    case 'active':   return Colors.greenDeep;
-    case 'pending':  return Colors.amber;
-    case 'complete': return Colors.greenConfirm;
-    default:         return Colors.textLight;
-  }
+// Accent bar colour matches status exactly as per PDF
+function accentFor(status: string) {
+  if (status === 'active')    return Colors.greenDeep;
+  if (status === 'completed') return Colors.greenConfirm;
+  if (status === 'pending')   return Colors.amber;
+  return Colors.textLight;
 }
 
-function getDotColor(status: PaymentStatus): string {
-  switch (status) {
-    case 'paid':
-    case 'confirmed': return Colors.greenConfirm;
-    case 'overdue':
-    case 'grace':     return Colors.amber;
-    case 'defaulted': return Colors.red;
-    default:          return Colors.border;
-  }
+// Dot colour per payment status
+function dotFor(status: string) {
+  if (status === 'paid' || status === 'confirmed') return Colors.greenConfirm;
+  if (status === 'overdue')   return Colors.amber;
+  if (status === 'defaulted') return Colors.red;
+  if (status === 'grace')     return Colors.amber;
+  return Colors.border;
 }
 
-function freqLabel(freq: Round['frequency']): string {
-  switch (freq) {
-    case 'weekly':    return 'wk';
-    case 'biweekly':  return '2wk';
-    case 'monthly':   return 'mo';
-    default:          return freq;
-  }
+function freqLabel(freq: string) {
+  if (freq === 'weekly')   return 'wk';
+  if (freq === 'biweekly') return '2wk';
+  return 'mo';
 }
+
+function currencySymbol(currency: string) {
+  if (currency === 'USD') return '$';
+  if (currency === 'ZAR') return 'R';
+  return currency + ' ';
+}
+
+// Status badge that matches PDF design exactly
+function StatusPill({ status }: { status: string }) {
+  const cfg: Record<string, { bg: string; color: string; label: string }> = {
+    active:    { bg: Colors.greenConfirm, color: Colors.white,   label: '✓ PAID'    },
+    pending:   { bg: Colors.bgLight,      color: Colors.textMed, label: '○ PENDING' },
+    completed: { bg: Colors.greenPale,    color: Colors.greenDeep, label: 'DONE'    },
+    cancelled: { bg: Colors.bgLight,      color: Colors.textLight, label: 'CANCELLED'},
+  };
+
+  // If the card itself has a payment status context use that
+  const c = cfg[status] ?? cfg.pending;
+
+  return (
+    <View style={[pill.base, { backgroundColor: c.bg }]}>
+      <Text style={[pill.text, { color: c.color }]}>{c.label}</Text>
+    </View>
+  );
+}
+const pill = StyleSheet.create({
+  base: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 100 },
+  text: { fontFamily: Fonts.bodySemiBold, fontSize: 10, letterSpacing: 0.3 },
+});
 
 export default function RoundCard({ round, onPress }: RoundCardProps) {
-  const accentColor = getAccentColor(round.status);
-  const currentCycle = round.cycles[round.currentCycleIndex];
-  const paidCount = currentCycle
-    ? currentCycle.payments.filter(p => ['paid', 'confirmed'].includes(p.status)).length
-    : 0;
-  const myMember = round.members.find(m => m.id === round.myMemberId);
-  const isMyPayoutCycle = currentCycle?.recipientMemberId === round.myMemberId;
+  const accent   = accentFor(round.status);
+  const cycle    = round.current_cycle;
+  const payments = cycle?.payments ?? [];
+  const paidCount = payments.filter(p => p.status === 'paid' || ['paid','confirmed'].includes(p.status)).length;
+  const sym      = currencySymbol(round.currency ?? 'USD');
+  const isPayoutCycle = payments.some((p: any) => p.is_recipient);
+
+  // Determine the right status badge — if I've paid this cycle show PAID, else show round status
+  const myPayment = payments.find((p: any) => p.is_mine);
+  const badgeStatus = myPayment?.status === 'paid' ? 'active' : round.status;
 
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.88} style={styles.wrapper}>
       <View style={[styles.card, Shadow.card]}>
-        <View style={[styles.accent, { backgroundColor: accentColor }]} />
+        {/* Accent bar — left edge, matches PDF exactly */}
+        <View style={[styles.accent, { backgroundColor: accent }]} />
 
         <View style={styles.content}>
-          {/* Name + status badge */}
-          <View style={styles.topRow}>
+          {/* Row 1: name + status badge */}
+          <View style={styles.row1}>
             <Text style={styles.name} numberOfLines={1}>{round.name}</Text>
-            {myMember && <StatusBadge status={myMember.currentPaymentStatus} size="sm" />}
+            <StatusPill status={badgeStatus} />
           </View>
 
-          {/* Amount · cycle */}
+          {/* Row 2: amount / freq · cycle info */}
           <Text style={styles.meta}>
-            <Text style={styles.amount}>
-              {round.currency === 'USD' ? '$' : round.currency}{round.amount}
-            </Text>
-            <Text style={styles.metaMuted}>
-              {' '}/ {freqLabel(round.frequency)}
-              {currentCycle
-                ? `  ·  Cycle ${round.currentCycleIndex + 1} of ${round.cycles.length}`
-                : ''}
-            </Text>
+            <Text style={styles.amount}>{sym}{round.contribution_amount}</Text>
+            <Text style={styles.metaMuted}> / {freqLabel(round.cycle_frequency ?? 'monthly')}</Text>
+            {cycle && (
+              <Text style={styles.metaMuted}>  ·  Cycle {cycle.cycle_number} of {round.total_cycles}</Text>
+            )}
+            {!cycle && round.total_cycles && (
+              <Text style={styles.metaMuted}>  ·  {round.total_cycles} cycles</Text>
+            )}
           </Text>
 
-          {/* Payout highlight */}
-          {isMyPayoutCycle && (
-            <View style={styles.payoutChip}>
-              <Ionicons name="radio-button-on" size={12} color={Colors.greenDeep} />
-              <Text style={styles.payoutChipText}>Your payout this cycle</Text>
+          {/* Payout banner */}
+          {isPayoutCycle && (
+            <View style={styles.payoutBanner}>
+              <Text style={styles.payoutText}>🎯 Your payout this cycle</Text>
             </View>
           )}
 
-          {/* Dots + paid count */}
-          <View style={styles.bottomRow}>
-            <View style={styles.dotsRow}>
-              {round.members.map(member => (
-                <View
-                  key={member.id}
-                  style={[
-                    styles.dot,
-                    { backgroundColor: getDotColor(member.currentPaymentStatus) },
-                    member.id === round.myMemberId && styles.dotMine,
-                  ]}
-                />
-              ))}
+          {/* Row 3: payment dots + paid count — matches PDF grid */}
+          <View style={styles.row3}>
+            <View style={styles.dotsWrap}>
+              {payments.length > 0
+                ? payments.map((p: any) => (
+                    <View key={p.id} style={[styles.dot, { backgroundColor: dotFor(p.status) }]} />
+                  ))
+                : Array.from({ length: round.total_cycles ?? 6 }).map((_, i) => (
+                    <View key={i} style={[styles.dot, { backgroundColor: Colors.border }]} />
+                  ))
+              }
             </View>
-            <Text style={styles.paidCount}>
-              {paidCount} of {round.members.length} paid
+            <Text style={styles.paidLabel}>
+              {payments.length > 0
+                ? `${paidCount} of ${payments.length} paid`
+                : `${round.number_of_members ?? round.total_cycles} members`
+              }
             </Text>
           </View>
         </View>
@@ -106,9 +130,7 @@ export default function RoundCard({ round, onPress }: RoundCardProps) {
 }
 
 const styles = StyleSheet.create({
-  wrapper: {
-    marginBottom: Spacing.md,
-  },
+  wrapper: { marginBottom: Spacing.md },
   card: {
     backgroundColor: Colors.white,
     borderRadius: Radius.xl,
@@ -117,79 +139,21 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     overflow: 'hidden',
   },
-  accent: {
-    width: 4,
-  },
-  content: {
-    flex: 1,
-    padding: Spacing.lg,
-    gap: Spacing.sm,
-  },
-  topRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Spacing.sm,
-  },
-  name: {
-    fontFamily: Fonts.displaySemiBold,
-    fontSize: 16,
-    color: Colors.textDark,
-    flex: 1,
-  },
-  meta: {
-    fontSize: 13,
-  },
-  amount: {
-    fontFamily: Fonts.mono,
-    fontSize: 13,
-    color: Colors.textDark,
-  },
-  metaMuted: {
-    fontFamily: Fonts.bodyRegular,
-    fontSize: 13,
-    color: Colors.textMed,
-  },
-  payoutChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: Colors.greenPale,
-    alignSelf: 'flex-start',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: Radius.pill,
-  },
-  payoutChipText: {
-    fontFamily: Fonts.bodySemiBold,
-    fontSize: 12,
-    color: Colors.greenDeep,
-  },
-  bottomRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  dotsRow: {
-    flexDirection: 'row',
-    gap: 5,
-    flexWrap: 'wrap',
-    flex: 1,
-  },
-  dot: {
-    width: 9,
-    height: 9,
-    borderRadius: 5,
-  },
-  dotMine: {
-    borderWidth: 1.5,
-    borderColor: Colors.greenDeep,
-  },
-  paidCount: {
-    fontFamily: Fonts.bodyRegular,
-    fontSize: 12,
-    color: Colors.textMed,
-    marginLeft: Spacing.sm,
-    flexShrink: 0,
-  },
+  accent: { width: 4 },
+  content: { flex: 1, paddingHorizontal: Spacing.lg, paddingVertical: 14, gap: 6 },
+
+  row1: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },
+  name: { fontFamily: Fonts.displaySemiBold, fontSize: 15, color: Colors.textDark, flex: 1 },
+
+  meta: { fontSize: 13 },
+  amount: { fontFamily: Fonts.mono, fontSize: 13, color: Colors.textDark },
+  metaMuted: { fontFamily: Fonts.bodyRegular, fontSize: 13, color: Colors.textMed },
+
+  payoutBanner: { backgroundColor: Colors.greenPale, borderRadius: Radius.sm, paddingHorizontal: Spacing.sm, paddingVertical: 4, alignSelf: 'flex-start' },
+  payoutText:   { fontFamily: Fonts.bodySemiBold, fontSize: 12, color: Colors.greenDeep },
+
+  row3: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  dotsWrap: { flexDirection: 'row', gap: 5, flexWrap: 'wrap', flex: 1 },
+  dot: { width: 10, height: 10, borderRadius: 5 },
+  paidLabel: { fontFamily: Fonts.bodyRegular, fontSize: 12, color: Colors.textMed, flexShrink: 0, marginLeft: Spacing.sm },
 });

@@ -5,8 +5,6 @@ import { router } from 'expo-router';
 
 const isExpoGo = Constants.appOwnership === 'expo';
 
-// Only load expo-notifications outside Expo Go — importing it in Expo Go triggers
-// DevicePushTokenAutoRegistration.fx.js which throws at module load time (SDK 53+).
 type NotificationsModule = typeof import('expo-notifications');
 const Notifications: NotificationsModule | null = isExpoGo
   ? null
@@ -18,6 +16,8 @@ if (Notifications) {
       shouldShowAlert: true,
       shouldPlaySound: true,
       shouldSetBadge: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
     }),
   });
 }
@@ -25,19 +25,17 @@ if (Notifications) {
 export const notificationService = {
   registerForPushNotifications: async (userId: string) => {
     if (!Notifications) return;
-
     try {
       const { status } = await Notifications.requestPermissionsAsync();
       if (status !== 'granted') return;
-
       const token = (await Notifications.getExpoPushTokenAsync()).data;
       await AsyncStorage.setItem('expo_push_token', token);
-      await api.post('/users/device-token', {
+      await api.post('/users/me/device-token', {
         expo_token: token,
-        device_type: 'mobile',
+        device_type: 'android',
       });
     } catch (error) {
-      console.error('Failed to register for push notifications:', error);
+      console.error('Push notification registration failed:', error);
     }
   },
 
@@ -45,46 +43,47 @@ export const notificationService = {
     if (!Notifications) return;
 
     Notifications.addNotificationReceivedListener((notification) => {
-      console.log('Notification received:', notification);
+      if (__DEV__) console.log('[Notification received]', notification);
     });
 
     Notifications.addNotificationResponseReceivedListener((response) => {
-      const { type, reference_id } = response.notification.request.content.data;
+      const data = response.notification.request.content.data as any;
+      const { type, reference_id } = data ?? {};
 
       switch (type) {
         case 'payment_due':
-          router.push(`/rounds/${reference_id}/cycle`);
+        case 'cycle_opening':
+        case 'proof_pending':
+          if (reference_id) router.push(`/(app)/rounds/${reference_id}`);
           break;
         case 'round_update':
-          router.push(`/rounds/${reference_id}`);
+        case 'contract_signed':
+        case 'member_joined':
+          if (reference_id) router.push(`/(app)/rounds/${reference_id}`);
           break;
-        case 'goal_update':
-          router.push(`/goals/${reference_id}`);
-          break;
-        case 'new_payment':
-          router.push(`/rounds/${reference_id}`);
+        case 'goal_milestone':
+        case 'goal_due':
+          if (reference_id) router.push(`/(app)/goals/${reference_id}`);
           break;
         default:
-          router.push('/(app)');
+          router.push('/');
           break;
       }
     });
   },
 
   getNotifications: async () => {
-    const response = await api.get('/notifications');
+    const response = await api.get('/notifications/notifications');
     return response.data;
   },
 
   markAsRead: async (notificationId: string) => {
-    const response = await api.patch(`/notifications/${notificationId}`, {
-      is_read: true,
-    });
+    const response = await api.put(`/notifications/${notificationId}/read`, {});
     return response.data;
   },
 
   markAllAsRead: async () => {
-    const response = await api.patch('/notifications/mark-all-read', {});
+    const response = await api.put('/notifications/read-all', {});
     return response.data;
   },
 };

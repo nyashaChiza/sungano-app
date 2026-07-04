@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  RefreshControl,
   Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -222,8 +223,14 @@ const gc = StyleSheet.create({
 export default function GoalsHubScreen({ onGoalPress, onCreateGoal }: GoalsHubScreenProps) {
   const { goals, isLoading, fetchGoals } = useGoalsStore();
   const [filter, setFilter] = useState<TabFilter>('all');
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => { fetchGoals(); }, []);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try { await fetchGoals(); } finally { setRefreshing(false); }
+  }, [fetchGoals]);
 
   const activeGoals = goals.filter(g => g.status === 'active');
   const completedGoals = goals.filter(g => g.status === 'completed' || g.status === 'cancelled');
@@ -296,7 +303,18 @@ export default function GoalsHubScreen({ onGoalPress, onCreateGoal }: GoalsHubSc
           <ActivityIndicator size="large" color={Colors.greenDeep} />
         </View>
       ) : (
-        <ScrollView contentContainerStyle={s.list} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={s.list}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={Colors.greenDeep}
+              colors={[Colors.greenDeep]}
+            />
+          }
+        >
           {filteredActive.map(g => (
             <ActiveGoalCard key={g.id} goal={g} onPress={() => onGoalPress(g.id)} />
           ))}

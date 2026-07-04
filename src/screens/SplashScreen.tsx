@@ -1,14 +1,7 @@
 import React, { useEffect, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Animated,
-  Dimensions,
-} from 'react-native';
+import { View, Text, StyleSheet, Animated, Dimensions } from 'react-native';
 import { Colors, Fonts } from '../constants/theme';
 import SunganoMark from '../components/brand/SunganoMark';
-import SunganoWordmark from '../components/brand/SunganoWordmark';
 import RingsPattern from '../components/brand/RingsPattern';
 
 const { width, height } = Dimensions.get('window');
@@ -19,30 +12,18 @@ interface SplashScreenProps {
 
 export default function SplashScreen({ onFinish }: SplashScreenProps) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.85)).current;
-  const dot1Anim = useRef(new Animated.Value(0.3)).current;
-  const dot2Anim = useRef(new Animated.Value(0.3)).current;
-  const dot3Anim = useRef(new Animated.Value(0.3)).current;
+  const scaleAnim = useRef(new Animated.Value(0.88)).current;
+  const taglineFade = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    // Logo in
     Animated.parallel([
       Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
-      Animated.spring(scaleAnim, { toValue: 1, tension: 50, friction: 8, useNativeDriver: true }),
-    ]).start();
-
-    const pulseDot = (anim: Animated.Value, delay: number) => {
-      Animated.loop(
-        Animated.sequence([
-          Animated.delay(delay),
-          Animated.timing(anim, { toValue: 1, duration: 400, useNativeDriver: true }),
-          Animated.timing(anim, { toValue: 0.3, duration: 400, useNativeDriver: true }),
-        ])
-      ).start();
-    };
-
-    pulseDot(dot1Anim, 0);
-    pulseDot(dot2Anim, 200);
-    pulseDot(dot3Anim, 400);
+      Animated.spring(scaleAnim, { toValue: 1, tension: 60, friction: 9, useNativeDriver: true }),
+    ]).start(() => {
+      // Tagline fades in after logo
+      Animated.timing(taglineFade, { toValue: 1, duration: 400, useNativeDriver: true }).start();
+    });
 
     const timer = setTimeout(onFinish, 2800);
     return () => clearTimeout(timer);
@@ -50,18 +31,22 @@ export default function SplashScreen({ onFinish }: SplashScreenProps) {
 
   return (
     <View style={styles.container}>
-      <RingsPattern width={width} height={height} color={Colors.white} opacity={0.08} />
+      <RingsPattern width={width} height={height} color={Colors.white} opacity={0.07} />
       <Animated.View style={[styles.content, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
-        <SunganoMark size={100} color={Colors.white} strokeWidth={3} />
-        <View style={styles.wordmarkRow}>
-          <SunganoWordmark color={Colors.white} size={38} />
-        </View>
-        <Text style={styles.tagline}>Keep your word.</Text>
+        {/* Mark only — matches the PDF splash exactly */}
+        <SunganoMark size={96} color={Colors.white} strokeWidth={2.5} />
+        {/* Wordmark as plain text to match Fraunces exactly */}
+        <Text style={styles.wordmark}>Sungano</Text>
+        <Animated.Text style={[styles.tagline, { opacity: taglineFade }]}>
+          KEEP YOUR WORD.
+        </Animated.Text>
       </Animated.View>
-      <View style={styles.dots}>
-        <Animated.View style={[styles.dot, { opacity: dot1Anim }]} />
-        <Animated.View style={[styles.dot, { opacity: dot2Anim }]} />
-        <Animated.View style={[styles.dot, { opacity: dot3Anim }]} />
+
+      {/* Three dot page indicator at bottom matching PDF */}
+      <View style={styles.dotsRow}>
+        <View style={[styles.dot, styles.dotInactive]} />
+        <View style={[styles.dot, styles.dotInactive]} />
+        <View style={[styles.dot, styles.dotActive]} />
       </View>
     </View>
   );
@@ -76,20 +61,24 @@ const styles = StyleSheet.create({
   },
   content: {
     alignItems: 'center',
+    gap: 16,
   },
-  wordmarkRow: {
-    marginTop: 20,
-    marginBottom: 12,
+  wordmark: {
+    fontFamily: Fonts.displayBold,
+    fontSize: 36,
+    color: Colors.white,
+    letterSpacing: 0.2,
   },
   tagline: {
-    fontFamily: Fonts.displaySemiBold,
-    fontSize: 18,
-    color: 'rgba(255,255,255,0.75)',
-    letterSpacing: 0.3,
+    fontFamily: Fonts.bodySemiBold,
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.55)',
+    letterSpacing: 3,
+    marginTop: 4,
   },
-  dots: {
+  dotsRow: {
     position: 'absolute',
-    bottom: 60,
+    bottom: 52,
     flexDirection: 'row',
     gap: 8,
   },
@@ -97,6 +86,11 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
+  },
+  dotActive: {
     backgroundColor: Colors.white,
+  },
+  dotInactive: {
+    backgroundColor: 'rgba(255,255,255,0.35)',
   },
 });

@@ -35,7 +35,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   setAuth: (user, token, refreshToken) => {
     set({ user, token, refreshToken });
     AsyncStorage.setItem('access_token', token);
-    AsyncStorage.setItem('refresh_token', refreshToken);
+    if (refreshToken) AsyncStorage.setItem('refresh_token', refreshToken);
   },
 
   loadAuth: async () => {
@@ -44,36 +44,31 @@ export const useAuthStore = create<AuthState>((set) => ({
       const token = await AsyncStorage.getItem('access_token');
       const refreshToken = await AsyncStorage.getItem('refresh_token');
 
-      if (token && refreshToken) {
+      if (token) {
         try {
           const res = await api.get('/users/me');
+          const userData = res.data?.data ?? res.data;
           set({
-            user: res.data.data,
+            user: userData,
             token,
-            refreshToken,
+            refreshToken: refreshToken ?? null,
             isLoading: false,
           });
-        } catch (error) {
-          // Token expired or invalid, clear storage
+        } catch {
           await AsyncStorage.multiRemove(['access_token', 'refresh_token']);
-          set({
-            user: null,
-            token: null,
-            refreshToken: null,
-            isLoading: false,
-          });
+          set({ user: null, token: null, refreshToken: null, isLoading: false });
         }
       } else {
         set({ isLoading: false });
       }
-    } catch (error) {
+    } catch {
       set({ isLoading: false });
     }
   },
 
   logout: async () => {
     await AsyncStorage.multiRemove(['access_token', 'refresh_token']);
-    set({ user: null, token: null, refreshToken: null });
+    set({ user: null, token: null, refreshToken: null, pendingInviteToken: null });
   },
 
   updateUser: (data) => {

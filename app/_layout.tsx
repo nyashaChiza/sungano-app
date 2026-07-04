@@ -8,7 +8,7 @@ import {
 import {
   DMSans_400Regular,
   DMSans_500Medium,
-  DMSans_600SemiBold,
+  DMSans_700Bold,
 } from '@expo-google-fonts/dm-sans';
 import {
   JetBrainsMono_500Medium,
@@ -26,7 +26,8 @@ export default function RootLayout() {
     Fraunces_600SemiBold,
     DMSans_400Regular,
     DMSans_500Medium,
-    DMSans_600SemiBold,
+    // Map the SemiBold name to Bold since the package ships 700Bold not 600SemiBold
+    DMSans_600SemiBold: DMSans_700Bold,
     JetBrainsMono_500Medium,
   });
 

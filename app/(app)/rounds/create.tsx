@@ -8,20 +8,41 @@ import {
   Platform,
   TextInput,
   TouchableOpacity,
-  Alert,
   Modal,
+  Linking,
+  Share as RNShare,
 } from 'react-native';
+import { toast } from '../../../src/utils/toast';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Colors, Fonts, Spacing, Radius } from '../../../src/constants/theme';
 import Button from '../../../src/components/ui/Button';
-import { useRounds } from '../../../src/hooks/useRounds';
+import { useRoundsStore } from '../../../src/store/roundsStore';
+import { useNavStore } from '../../../src/store/navStore';
+import { useAuthStore } from '../../../src/store/authStore';
+
+// ── helpers ────────────────────────────────────────────────────────────────
+
+function initials(name?: string) {
+  return (name ?? '').trim().split(/\s+/).filter(Boolean)
+    .map(w => w[0]?.toUpperCase() ?? '').slice(0, 2).join('');
+}
+
+// ── types ──────────────────────────────────────────────────────────────────
+
+interface PendingMember {
+  id: string;
+  name: string;
+}
+
+// ── screen ─────────────────────────────────────────────────────────────────
 
 export default function CreateRoundScreen() {
   const router = useRouter();
-  const { createNewRound } = useRounds();
+  const { createRound } = useRoundsStore();
+  const { user: authUser } = useAuthStore();
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -36,101 +57,167 @@ export default function CreateRoundScreen() {
   const [startDateObj, setStartDateObj] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [members, setMembers] = useState('');
+  const [totalCycles, setTotalCycles] = useState('');
   const [payoutMethod, setPayoutMethod] = useState('bank_transfer');
+  const [payoutOrderMethod, setPayoutOrderMethod] = useState('random');
   const [gracePeriod, setGracePeriod] = useState('3');
   const [penalty, setPenalty] = useState('5');
 
-  // Step 3
-  const [contractMode, setContractMode] = useState<'simple' | 'formal'>('simple');
+  // Step 3 — Members
+  const [pendingMembers, setPendingMembers] = useState<PendingMember[]>([]);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newMemberName, setNewMemberName] = useState('');
 
-  const handleNextStep = () => {
-    if (step === 1) {
-      if (!name.trim() || !amount.trim()) {
-        Alert.alert('Error', 'Please fill in all required fields');
-        return;
-      }
-      setStep(2);
-    } else if (step === 2) {
-      if (!startDate || !members.trim()) {
-        Alert.alert('Error', 'Please select a start date and enter the number of members');
-        return;
-      }
-      setStep(3);
-    } else if (step === 3) {
-      handleCreateRound();
-    }
+  const maxPending = Math.max(0, (parseInt(members, 10) || 10) - 1);
+  const canAddMore = pendingMembers.length < maxPending;
+
+  const adminName = authUser?.full_name ?? authUser?.email ?? 'You';
+
+  // ── navigation ─────────────────────────────────────────────────────────
+
+  const handleBack = () => {
+    useNavStore.getState().setPendingTab('rounds');
+    router.back();
   };
 
-  const handleCreateRound = async () => {
+  // ── member management ──────────────────────────────────────────────────
+
+  const addMember = () => {
+    const trimmed = newMemberName.trim();
+    if (!trimmed) return;
+    setPendingMembers(prev => [...prev, { id: String(Date.now()), name: trimmed }]);
+    setNewMemberName('');
+    setShowAddModal(false);
+  };
+
+  const removeMember = (id: string) => setPendingMembers(prev => prev.filter(m => m.id !== id));
+
+  // ── round creation ─────────────────────────────────────────────────────
+
+  const buildData = () => {
+    const n = parseInt(members, 10);
+    return {
+      name: name.trim(),
+      contribution_amount: parseFloat(amount),
+      currency,
+      cycle_frequency: frequency,
+      start_date: startDateObj.toISOString().split('T')[0],
+      number_of_members: n,
+      total_cycles: totalCycles.trim() ? parseInt(totalCycles, 10) : n,
+      payout_method: payoutMethod,
+      payout_order_method: payoutOrderMethod,
+      grace_period_days: parseInt(gracePeriod, 10),
+      late_payment_penalty_percentage: parseFloat(penalty),
+      contract_mode: 'simple' as const,
+    };
+  };
+
+  const shareInvite = async (round: any, method: 'whatsapp' | 'sms' | 'link') => {
+    const token = round.invite_token;
+    const msg = token
+      ? `Join "${round.name}" on Sungano!\n\nInvite code: ${token}`
+      : `Join my savings round "${round.name}" on Sungano!`;
+    try {
+      if (method === 'whatsapp') {
+        const url = `whatsapp://send?text=${encodeURIComponent(msg)}`;
+        const ok = await Linking.canOpenURL(url);
+        if (ok) await Linking.openURL(url);
+        else await RNShare.share({ message: msg });
+      } else if (method === 'sms') {
+        const url = Platform.OS === 'ios'
+          ? `sms:&body=${encodeURIComponent(msg)}`
+          : `sms:?body=${encodeURIComponent(msg)}`;
+        await Linking.openURL(url);
+      } else {
+        await RNShare.share({ message: msg });
+      }
+    } catch {}
+  };
+
+  const handleCreateRound = async (shareMethod?: 'whatsapp' | 'sms' | 'link') => {
     setIsLoading(true);
     try {
-      const data = {
-        name,
-        contribution_amount: parseFloat(amount),
-        currency,
-        frequency,
-        start_date: startDateObj.toISOString().split('T')[0],
-        number_of_members: parseInt(members),
-        payout_method: payoutMethod,
-        grace_period_days: parseInt(gracePeriod),
-        late_payment_penalty_percentage: parseFloat(penalty),
-        contract_mode: contractMode,
-      };
-
-      const round = await createNewRound(data);
-      Alert.alert('Success', 'Round created successfully!', [
-        {
-          text: 'OK',
-          onPress: () => router.push(`/rounds/${round.id}`),
-        },
-      ]);
+      const round = await createRound(buildData());
+      toast.success(`"${round.name}" is ready.`, 'Round created!');
+      if (shareMethod) await shareInvite(round, shareMethod);
+      useNavStore.getState().setPendingTab('rounds');
+      router.back();
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to create round');
+      let msg: string;
+      if (error.code === 'ECONNABORTED') {
+        msg = 'Request timed out — check your connection and try again.';
+      } else {
+        const detail = error.response?.data?.detail;
+        if (Array.isArray(detail)) {
+          msg = detail.map((e: any) => `${e.loc?.slice(1).join(' → ')}: ${e.msg}`).join('\n');
+        } else {
+          msg = detail ?? error.response?.data?.message ?? error.message ?? 'Failed to create round.';
+        }
+      }
+      toast.error(msg);
     } finally {
       setIsLoading(false);
     }
   };
 
+  const handleNext = () => {
+    if (step === 1) {
+      if (!name.trim() || !amount.trim()) {
+        toast.error('Please fill in all required fields');
+        return;
+      }
+      setStep(2);
+    } else if (step === 2) {
+      if (!startDate || !members.trim()) {
+        toast.error('Please select a start date and enter the number of members');
+        return;
+      }
+      setStep(3);
+    } else {
+      handleCreateRound();
+    }
+  };
+
+  const STEP_TITLES = ['Details', 'Settings', 'Members'];
+
+  // ── render ────────────────────────────────────────────────────────────
+
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.kvContainer}
+        style={styles.kv}
       >
-        {/* Header */}
+        {/* ── Header ─────────────────────────────────────────────────── */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()}>
+          <TouchableOpacity
+            onPress={step > 1 ? () => setStep(s => s - 1) : handleBack}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
             <Ionicons name="arrow-back" size={24} color={Colors.textDark} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Create Round</Text>
-          <View style={styles.headerSpacer} />
+          <View style={styles.headerCenter}>
+            <Text style={styles.headerMeta}>STEP {step} OF 3</Text>
+            <Text style={styles.headerTitle}>{STEP_TITLES[step - 1]}</Text>
+          </View>
+          <View style={{ width: 24 }} />
         </View>
 
-        {/* Step Indicator */}
-        <View style={styles.stepIndicator}>
-          {[1, 2, 3].map((s) => (
-            <View key={s} style={styles.stepWrapper}>
-              <View
-                style={[
-                  styles.stepDot,
-                  s <= step && styles.stepDotActive,
-                ]}
-              >
-                <Text style={styles.stepNumber}>{s}</Text>
-              </View>
-            </View>
+        {/* ── Progress segments ────────────────────────────────────────── */}
+        <View style={styles.progressRow}>
+          {[1, 2, 3].map(s => (
+            <View key={s} style={[styles.progressSeg, s <= step && styles.progressSegActive]} />
           ))}
         </View>
 
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
+        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+
+          {/* ────────────────── Step 1: Details ────────────────────────── */}
           {step === 1 && (
             <View style={styles.stepContent}>
               <Text style={styles.stepTitle}>Round Details</Text>
 
-              <View style={styles.inputGroup}>
+              <View style={styles.field}>
                 <Text style={styles.label}>Round Name</Text>
                 <TextInput
                   style={styles.input}
@@ -141,7 +228,7 @@ export default function CreateRoundScreen() {
                 />
               </View>
 
-              <View style={styles.inputGroup}>
+              <View style={styles.field}>
                 <Text style={styles.label}>Contribution Amount</Text>
                 <TextInput
                   style={styles.input}
@@ -153,7 +240,7 @@ export default function CreateRoundScreen() {
                 />
               </View>
 
-              <View style={styles.inputGroup}>
+              <View style={styles.field}>
                 <Text style={styles.label}>Currency</Text>
                 <View style={styles.pillRow}>
                   {['USD', 'NGN', 'ZWG', 'GBP'].map(c => (
@@ -168,7 +255,7 @@ export default function CreateRoundScreen() {
                 </View>
               </View>
 
-              <View style={styles.inputGroup}>
+              <View style={styles.field}>
                 <Text style={styles.label}>Frequency</Text>
                 <View style={styles.pillRow}>
                   {['weekly', 'biweekly', 'monthly'].map(f => (
@@ -187,29 +274,22 @@ export default function CreateRoundScreen() {
             </View>
           )}
 
+          {/* ────────────────── Step 2: Settings ───────────────────────── */}
           {step === 2 && (
             <View style={styles.stepContent}>
               <Text style={styles.stepTitle}>Round Settings</Text>
 
-              <View style={styles.inputGroup}>
+              <View style={styles.field}>
                 <Text style={styles.label}>Start Date</Text>
-                <TouchableOpacity
-                  style={styles.selectInput}
-                  onPress={() => setShowDatePicker(true)}
-                >
+                <TouchableOpacity style={styles.selectInput} onPress={() => setShowDatePicker(true)}>
                   <Text style={[styles.selectText, !startDate && { color: Colors.textLight }]}>
                     {startDate || 'Select date'}
                   </Text>
                   <Ionicons name="calendar-outline" size={16} color={Colors.textMed} />
                 </TouchableOpacity>
 
-                {/* iOS — modal sheet */}
                 {Platform.OS === 'ios' && (
-                  <Modal
-                    visible={showDatePicker}
-                    transparent
-                    animationType="slide"
-                  >
+                  <Modal visible={showDatePicker} transparent animationType="slide">
                     <View style={styles.pickerOverlay}>
                       <View style={styles.pickerSheet}>
                         <View style={styles.pickerHeader}>
@@ -228,12 +308,10 @@ export default function CreateRoundScreen() {
                           minimumDate={new Date()}
                           textColor={Colors.textDark}
                           style={{ height: 200 }}
-                          onValueChange={(_e: any, date: Date) => {
+                          onChange={(_e: any, date?: Date) => {
                             if (date) {
                               setStartDateObj(date);
-                              setStartDate(date.toLocaleDateString('en-US', {
-                                month: 'short', day: 'numeric', year: 'numeric',
-                              }));
+                              setStartDate(date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }));
                             }
                           }}
                         />
@@ -242,40 +320,70 @@ export default function CreateRoundScreen() {
                   </Modal>
                 )}
 
-                {/* Android — inline dialog */}
                 {Platform.OS === 'android' && showDatePicker && (
                   <DateTimePicker
                     value={startDateObj}
                     mode="date"
                     display="default"
                     minimumDate={new Date()}
-                    onValueChange={(_e: any, date: Date) => {
+                    onChange={(_e: any, date?: Date) => {
                       setShowDatePicker(false);
                       if (date) {
                         setStartDateObj(date);
-                        setStartDate(date.toLocaleDateString('en-US', {
-                          month: 'short', day: 'numeric', year: 'numeric',
-                        }));
+                        setStartDate(date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }));
                       }
                     }}
-                    onDismiss={() => setShowDatePicker(false)}
                   />
                 )}
               </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Number of Members</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="5"
-                  value={members}
-                  onChangeText={setMembers}
-                  keyboardType="number-pad"
-                  placeholderTextColor={Colors.textLight}
-                />
+              <View style={styles.rowFields}>
+                <View style={[styles.field, styles.flex1]}>
+                  <Text style={styles.label}>Number of Members</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="5"
+                    value={members}
+                    onChangeText={setMembers}
+                    keyboardType="number-pad"
+                    placeholderTextColor={Colors.textLight}
+                  />
+                </View>
+                <View style={[styles.field, styles.flex1]}>
+                  <Text style={styles.label}>Total Cycles</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder={members || '5'}
+                    value={totalCycles}
+                    onChangeText={setTotalCycles}
+                    keyboardType="number-pad"
+                    placeholderTextColor={Colors.textLight}
+                  />
+                </View>
               </View>
 
-              <View style={styles.inputGroup}>
+              <View style={styles.field}>
+                <Text style={styles.label}>Payout Order</Text>
+                <View style={styles.pillRow}>
+                  {[
+                    { value: 'random', label: 'Random' },
+                    { value: 'fixed',  label: 'Fixed' },
+                    { value: 'bidding', label: 'Bidding' },
+                  ].map(opt => (
+                    <TouchableOpacity
+                      key={opt.value}
+                      onPress={() => setPayoutOrderMethod(opt.value)}
+                      style={[styles.pill, payoutOrderMethod === opt.value && styles.pillActive]}
+                    >
+                      <Text style={[styles.pillText, payoutOrderMethod === opt.value && styles.pillTextActive]}>
+                        {opt.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              <View style={styles.field}>
                 <Text style={styles.label}>Payout Method</Text>
                 <View style={styles.pillRow}>
                   {[
@@ -296,8 +404,8 @@ export default function CreateRoundScreen() {
                 </View>
               </View>
 
-              <View style={styles.rowInputs}>
-                <View style={[styles.inputGroup, styles.flex1]}>
+              <View style={styles.rowFields}>
+                <View style={[styles.field, styles.flex1]}>
                   <Text style={styles.label}>Grace Period (days)</Text>
                   <TextInput
                     style={styles.input}
@@ -308,8 +416,7 @@ export default function CreateRoundScreen() {
                     placeholderTextColor={Colors.textLight}
                   />
                 </View>
-
-                <View style={[styles.inputGroup, styles.flex1]}>
+                <View style={[styles.field, styles.flex1]}>
                   <Text style={styles.label}>Late Penalty (%)</Text>
                   <TextInput
                     style={styles.input}
@@ -324,168 +431,202 @@ export default function CreateRoundScreen() {
             </View>
           )}
 
+          {/* ────────────────── Step 3: Members ────────────────────────── */}
           {step === 3 && (
             <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>Contract Mode</Text>
+              <Text style={styles.stepTitle}>Who's in the round?</Text>
+              <Text style={styles.stepSubtitle}>
+                Add everyone contributing. The pot rotates once per member.
+              </Text>
 
-              <View style={styles.contractOptions}>
-                <TouchableOpacity
-                  style={[
-                    styles.contractOption,
-                    contractMode === 'simple' && styles.contractOptionActive,
-                  ]}
-                  onPress={() => setContractMode('simple')}
-                >
-                  <View style={styles.contractRadio}>
-                    {contractMode === 'simple' && (
-                      <View style={styles.contractRadioInner} />
-                    )}
-                  </View>
-                  <View style={styles.contractTextContainer}>
-                    <Text style={styles.contractTitle}>Simple</Text>
-                    <Text style={styles.contractDesc}>
-                      Quick setup with default terms
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.contractOption,
-                    contractMode === 'formal' && styles.contractOptionActive,
-                  ]}
-                  onPress={() => setContractMode('formal')}
-                >
-                  <View style={styles.contractRadio}>
-                    {contractMode === 'formal' && (
-                      <View style={styles.contractRadioInner} />
-                    )}
-                  </View>
-                  <View style={styles.contractTextContainer}>
-                    <Text style={styles.contractTitle}>Formal</Text>
-                    <Text style={styles.contractDesc}>
-                      Custom terms and legal framework
-                    </Text>
-                  </View>
-                </TouchableOpacity>
+              {/* Admin (current user) */}
+              <View style={styles.memberCard}>
+                <View style={[styles.memberAvatar, { backgroundColor: Colors.greenDeep }]}>
+                  <Text style={styles.memberAvatarText}>{initials(adminName) || 'YO'}</Text>
+                </View>
+                <View style={styles.memberInfo}>
+                  <Text style={styles.memberName}>{adminName}</Text>
+                  <Text style={styles.memberSub}>Admin · you</Text>
+                </View>
+                <View style={styles.youBadge}>
+                  <Text style={styles.youBadgeText}>YOU</Text>
+                </View>
               </View>
 
-              <View style={styles.summaryCard}>
-                <Text style={styles.summaryTitle}>Round Summary</Text>
-                <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Name:</Text>
-                  <Text style={styles.summaryValue}>{name}</Text>
+              {/* Pending members */}
+              {pendingMembers.map(m => (
+                <View key={m.id} style={styles.memberCard}>
+                  <View style={styles.memberAvatar}>
+                    <Text style={styles.memberAvatarText}>{initials(m.name)}</Text>
+                  </View>
+                  <View style={styles.memberInfo}>
+                    <Text style={styles.memberName}>{m.name}</Text>
+                    <Text style={styles.memberSub}>Will be invited to sign</Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => removeMember(m.id)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Ionicons name="close" size={20} color={Colors.textMed} />
+                  </TouchableOpacity>
                 </View>
-                <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Amount:</Text>
-                  <Text style={styles.summaryValue}>
-                    {currency} {amount}
-                  </Text>
-                </View>
-                <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Frequency:</Text>
-                  <Text style={styles.summaryValue}>{frequency}</Text>
+              ))}
+
+              {/* Add member */}
+              {canAddMore && (
+                <TouchableOpacity
+                  style={styles.addMemberBtn}
+                  onPress={() => setShowAddModal(true)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="add-circle-outline" size={20} color={Colors.greenDeep} />
+                  <Text style={styles.addMemberText}>Add member</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Invite via */}
+              <View style={styles.inviteSection}>
+                <Text style={styles.inviteLabel}>INVITE VIA</Text>
+                <View style={styles.inviteRow}>
+                  {([
+                    { icon: '💬', label: 'WhatsApp', method: 'whatsapp' },
+                    { icon: '💌', label: 'SMS',      method: 'sms'      },
+                    { icon: '🔗', label: 'Copy link', method: 'link'    },
+                  ] as const).map(opt => (
+                    <TouchableOpacity
+                      key={opt.method}
+                      style={styles.inviteOpt}
+                      onPress={() => handleCreateRound(opt.method)}
+                      activeOpacity={0.75}
+                    >
+                      <View style={styles.inviteOptIcon}>
+                        <Text style={styles.inviteOptEmoji}>{opt.icon}</Text>
+                      </View>
+                      <Text style={styles.inviteOptLabel}>{opt.label}</Text>
+                    </TouchableOpacity>
+                  ))}
                 </View>
               </View>
             </View>
           )}
         </ScrollView>
 
-        {/* Footer Buttons */}
+        {/* ── Footer ────────────────────────────────────────────────── */}
         <View style={styles.footer}>
           <Button
             label={step > 1 ? 'Back' : 'Cancel'}
-            onPress={() => (step > 1 ? setStep(step - 1) : router.back())}
+            onPress={() => step > 1 ? setStep(s => s - 1) : handleBack()}
             variant="ghost"
             fullWidth
             size="lg"
           />
           <Button
-            label={step === 3 ? 'Create' : 'Next'}
-            onPress={handleNextStep}
+            label={step === 3 ? 'Create Round' : 'Next'}
+            onPress={handleNext}
             loading={isLoading}
             fullWidth
             size="lg"
-            style={styles.nextButton}
+            style={styles.nextBtn}
           />
         </View>
+
+        {/* ── Add Member modal ──────────────────────────────────────── */}
+        <Modal visible={showAddModal} transparent animationType="fade">
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>Add Member</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="Full name"
+                placeholderTextColor={Colors.textLight}
+                value={newMemberName}
+                onChangeText={setNewMemberName}
+                autoFocus
+                returnKeyType="done"
+                onSubmitEditing={addMember}
+              />
+              <View style={styles.modalActions}>
+                <Button
+                  label="Cancel"
+                  onPress={() => { setShowAddModal(false); setNewMemberName(''); }}
+                  variant="ghost"
+                  fullWidth
+                />
+                <Button
+                  label="Add"
+                  onPress={addMember}
+                  fullWidth
+                  style={{ flex: 1, marginLeft: Spacing.sm }}
+                />
+              </View>
+            </View>
+          </View>
+        </Modal>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
+// ── Styles ─────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.white,
-  },
-  kvContainer: {
-    flex: 1,
-  },
+  container:  { flex: 1, backgroundColor: Colors.white },
+  kv:         { flex: 1 },
+
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.lg,
+    paddingVertical: Spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
-  headerTitle: {
-    fontFamily: Fonts.displayBold,
-    fontSize: 18,
-    color: Colors.textDark,
-  },
-  headerSpacer: {
-    width: 24,
-  },
-  stepIndicator: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 40,
-    paddingVertical: Spacing.lg,
-  },
-  stepWrapper: {
-    alignItems: 'center',
-  },
-  stepDot: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: Colors.bgLight,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  stepDotActive: {
-    backgroundColor: Colors.greenDeep,
-  },
-  stepNumber: {
+  headerCenter: { alignItems: 'center' },
+  headerMeta: {
     fontFamily: Fonts.bodySemiBold,
-    fontSize: 14,
-    color: Colors.white,
+    fontSize: 11,
+    color: Colors.textLight,
+    letterSpacing: 1,
+    marginBottom: 2,
   },
-  scrollContent: {
-    padding: Spacing.lg,
-    paddingBottom: Spacing.lg,
-  },
-  stepContent: {
-    gap: Spacing.lg,
-  },
-  stepTitle: {
-    fontFamily: Fonts.displayBold,
-    fontSize: 20,
+  headerTitle: {
+    fontFamily: Fonts.displaySemiBold,
+    fontSize: 17,
     color: Colors.textDark,
-    marginBottom: Spacing.md,
   },
-  inputGroup: {
+
+  progressRow: {
+    flexDirection: 'row',
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
     gap: Spacing.sm,
   },
-  label: {
-    fontFamily: Fonts.bodySemiBold,
-    fontSize: 13,
-    color: Colors.textDark,
+  progressSeg: {
+    flex: 1, height: 4, borderRadius: 2,
+    backgroundColor: Colors.greenSubtle,
   },
+  progressSegActive: { backgroundColor: Colors.greenDeep },
+
+  scroll:      { padding: Spacing.lg, paddingBottom: Spacing.xl },
+  stepContent: { gap: Spacing.lg },
+
+  stepTitle: {
+    fontFamily: Fonts.displayBold,
+    fontSize: 22,
+    color: Colors.textDark,
+    marginBottom: Spacing.xs,
+  },
+  stepSubtitle: {
+    fontFamily: Fonts.bodyRegular,
+    fontSize: 14,
+    color: Colors.textMed,
+    lineHeight: 21,
+    marginTop: -Spacing.sm,
+  },
+
+  field:   { gap: Spacing.sm },
+  label:   { fontFamily: Fonts.bodySemiBold, fontSize: 13, color: Colors.textDark },
   input: {
     backgroundColor: Colors.bgLight,
     borderRadius: Radius.lg,
@@ -508,16 +649,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  selectText: {
-    fontFamily: Fonts.bodyRegular,
-    fontSize: 14,
-    color: Colors.textDark,
-  },
-  pillRow: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-    flexWrap: 'wrap',
-  },
+  selectText: { fontFamily: Fonts.bodyRegular, fontSize: 14, color: Colors.textDark },
+  rowFields:  { flexDirection: 'row', gap: Spacing.md },
+  flex1:      { flex: 1 },
+
+  pillRow:  { flexDirection: 'row', gap: Spacing.sm, flexWrap: 'wrap' },
   pill: {
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.sm + 2,
@@ -526,101 +662,126 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: Colors.border,
   },
-  pillActive: {
-    backgroundColor: Colors.greenDeep,
-    borderColor: Colors.greenDeep,
-  },
-  pillText: {
-    fontFamily: Fonts.bodyMedium,
-    fontSize: 14,
-    color: Colors.textMed,
-  },
-  pillTextActive: {
-    color: Colors.white,
-    fontFamily: Fonts.bodySemiBold,
-  },
-  rowInputs: {
+  pillActive:     { backgroundColor: Colors.greenDeep, borderColor: Colors.greenDeep },
+  pillText:       { fontFamily: Fonts.bodyMedium, fontSize: 14, color: Colors.textMed },
+  pillTextActive: { color: Colors.white, fontFamily: Fonts.bodySemiBold },
+
+  // ── Member cards ──────────────────────────────────────────────────────
+  memberCard: {
     flexDirection: 'row',
-    gap: Spacing.md,
-  },
-  flex1: {
-    flex: 1,
-  },
-  contractOptions: {
-    gap: Spacing.md,
-  },
-  contractOption: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    padding: Spacing.md,
-    backgroundColor: Colors.bgLight,
-    borderRadius: Radius.lg,
-    borderWidth: 2,
-    borderColor: 'transparent',
-    gap: Spacing.md,
-  },
-  contractOptionActive: {
-    borderColor: Colors.greenDeep,
-    backgroundColor: Colors.greenPale,
-  },
-  contractRadio: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: Colors.greenDeep,
-    justifyContent: 'center',
     alignItems: 'center',
-    marginTop: Spacing.xs,
-  },
-  contractRadioInner: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: Colors.greenDeep,
-  },
-  contractTextContainer: {
-    flex: 1,
-  },
-  contractTitle: {
-    fontFamily: Fonts.bodySemiBold,
-    fontSize: 14,
-    color: Colors.textDark,
-  },
-  contractDesc: {
-    fontFamily: Fonts.bodyRegular,
-    fontSize: 12,
-    color: Colors.textMed,
-    marginTop: Spacing.xs,
-  },
-  summaryCard: {
-    backgroundColor: Colors.greenPale,
-    borderRadius: Radius.lg,
+    backgroundColor: Colors.white,
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    borderColor: Colors.border,
     padding: Spacing.md,
-    marginTop: Spacing.lg,
+    gap: Spacing.md,
   },
-  summaryTitle: {
+  memberAvatar: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: Colors.greenSubtle,
+    justifyContent: 'center', alignItems: 'center',
+    flexShrink: 0,
+  },
+  memberAvatarText: { fontFamily: Fonts.bodySemiBold, fontSize: 16, color: Colors.greenDeep },
+  memberInfo: { flex: 1 },
+  memberName: { fontFamily: Fonts.bodySemiBold, fontSize: 14, color: Colors.textDark },
+  memberSub:  { fontFamily: Fonts.bodyRegular, fontSize: 12, color: Colors.textMed, marginTop: 1 },
+
+  youBadge: {
+    backgroundColor: Colors.greenPale,
+    borderRadius: Radius.pill,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  youBadgeText: {
     fontFamily: Fonts.bodySemiBold,
-    fontSize: 14,
+    fontSize: 11,
     color: Colors.greenDeep,
+    letterSpacing: 0.5,
+  },
+
+  addMemberBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    borderRadius: Radius.xl,
+    borderWidth: 1.5,
+    borderColor: Colors.greenDeep,
+    borderStyle: 'dashed',
+    paddingVertical: Spacing.md,
+  },
+  addMemberText: { fontFamily: Fonts.bodySemiBold, fontSize: 14, color: Colors.greenDeep },
+
+  // ── Invite via ────────────────────────────────────────────────────────
+  inviteSection: { marginTop: Spacing.sm },
+  inviteLabel: {
+    fontFamily: Fonts.bodySemiBold,
+    fontSize: 11,
+    color: Colors.textMed,
+    letterSpacing: 1.2,
     marginBottom: Spacing.md,
   },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  inviteRow:  { flexDirection: 'row', gap: Spacing.md },
+  inviteOpt: {
+    flex: 1,
     alignItems: 'center',
-    paddingVertical: Spacing.sm,
+    gap: Spacing.sm,
+    backgroundColor: Colors.white,
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingVertical: Spacing.md,
   },
-  summaryLabel: {
+  inviteOptIcon: {
+    width: 44, height: 44,
+    borderRadius: 22,
+    backgroundColor: Colors.bgLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  inviteOptEmoji: { fontSize: 22 },
+  inviteOptLabel: { fontFamily: Fonts.bodyMedium, fontSize: 12, color: Colors.textDark },
+
+  // ── Footer ────────────────────────────────────────────────────────────
+  footer: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+    padding: Spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  nextBtn: { flex: 1 },
+
+  // ── Add member modal ──────────────────────────────────────────────────
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.xl,
+  },
+  modalCard: {
+    backgroundColor: Colors.white,
+    borderRadius: Radius.xl,
+    padding: Spacing.xl,
+    gap: Spacing.lg,
+  },
+  modalTitle: { fontFamily: Fonts.displayBold, fontSize: 18, color: Colors.textDark },
+  modalInput: {
+    backgroundColor: Colors.bgLight,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.md,
     fontFamily: Fonts.bodyRegular,
-    fontSize: 12,
-    color: Colors.textMed,
-  },
-  summaryValue: {
-    fontFamily: Fonts.bodySemiBold,
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.textDark,
   },
+  modalActions: { flexDirection: 'row', gap: Spacing.sm },
+
+  // ── Date picker (iOS modal) ───────────────────────────────────────────
   pickerOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.4)',
@@ -641,29 +802,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
-  pickerTitle: {
-    fontFamily: Fonts.displaySemiBold,
-    fontSize: 16,
-    color: Colors.textDark,
-  },
-  pickerCancel: {
-    fontFamily: Fonts.bodyRegular,
-    fontSize: 15,
-    color: Colors.textMed,
-  },
-  pickerDone: {
-    fontFamily: Fonts.bodySemiBold,
-    fontSize: 15,
-    color: Colors.greenDeep,
-  },
-  footer: {
-    flexDirection: 'row',
-    gap: Spacing.md,
-    padding: Spacing.lg,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
-  nextButton: {
-    flex: 1,
-  },
+  pickerTitle:  { fontFamily: Fonts.displaySemiBold, fontSize: 16, color: Colors.textDark },
+  pickerCancel: { fontFamily: Fonts.bodyRegular, fontSize: 15, color: Colors.textMed },
+  pickerDone:   { fontFamily: Fonts.bodySemiBold, fontSize: 15, color: Colors.greenDeep },
 });

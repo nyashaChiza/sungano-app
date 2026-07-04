@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  RefreshControl,
   Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -150,7 +151,7 @@ function ActiveRoundCard({
             <Text style={card.monoAmount}>
               {formatCurrency(round.contribution_amount, round.currency)}
             </Text>
-            <Text style={card.metaMuted}> / {freqLabel(round.frequency)}  ·  {cycleText}</Text>
+            <Text style={card.metaMuted}> / {freqLabel(round.cycle_frequency)}  ·  {cycleText}</Text>
           </Text>
 
           {isMyPayout && (
@@ -208,7 +209,7 @@ function CompletedRoundCard({ round, onPress }: { round: Round; onPress: () => v
         <View style={card.completedBody}>
           <Text style={card.name}>{round.name}</Text>
           <Text style={card.metaMuted}>
-            {formatCurrency(round.contribution_amount, round.currency)} / {freqLabel(round.frequency)}
+            {formatCurrency(round.contribution_amount, round.currency)} / {freqLabel(round.cycle_frequency)}
             {'  ·  '}{round.number_of_members} cycles
             {endDate ? `  ·  ${endDate}` : ''}
           </Text>
@@ -262,8 +263,14 @@ export default function RoundsScreen({ onRoundPress, onCreatePress }: RoundsScre
   const { rounds, isLoading, fetchRounds } = useRoundsStore();
   const { user } = useAuthStore();
   const [filter, setFilter] = useState<Filter>('all');
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => { fetchRounds(); }, []);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try { await fetchRounds(); } finally { setRefreshing(false); }
+  }, [fetchRounds]);
 
   const activeRounds    = rounds.filter(r => r.status === 'active');
   const completedRounds = rounds.filter(r => r.status === 'completed' || r.status === 'cancelled');
@@ -364,6 +371,14 @@ export default function RoundsScreen({ onRoundPress, onCreatePress }: RoundsScre
         <ScrollView
           contentContainerStyle={s.list}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={Colors.greenDeep}
+              colors={[Colors.greenDeep]}
+            />
+          }
         >
           {filteredActive.map(round => (
             <ActiveRoundCard

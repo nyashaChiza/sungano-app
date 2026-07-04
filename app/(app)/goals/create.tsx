@@ -9,8 +9,9 @@ import {
   TextInput,
   TouchableOpacity,
   SafeAreaView,
-  Alert,
 } from 'react-native';
+import { toast } from '../../../src/utils/toast';
+import { useNavStore } from '../../../src/store/navStore';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Fonts, Spacing, Radius } from '../../../src/constants/theme';
@@ -29,9 +30,14 @@ export default function CreateGoalPage() {
   const [type, setType] = useState<'solo' | 'group'>('solo');
   const [frequency, setFrequency] = useState('monthly');
 
+  const handleBack = () => {
+    useNavStore.getState().setPendingTab('goals');
+    router.back();
+  };
+
   const handleCreateGoal = async () => {
     if (!name.trim() || !targetAmount.trim() || !targetDate.trim()) {
-      Alert.alert('Error', 'Please fill in all required fields');
+      toast.error('Please fill in all required fields');
       return;
     }
 
@@ -47,14 +53,11 @@ export default function CreateGoalPage() {
       };
 
       const goal = await createNewGoal(data);
-      Alert.alert('Success', 'Goal created successfully!', [
-        {
-          text: 'OK',
-          onPress: () => router.push(`/goals/${goal.id}`),
-        },
-      ]);
+      toast.success('Your goal is ready.', 'Goal created!');
+      useNavStore.getState().setPendingTab('goals');
+      router.back();
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to create goal');
+      toast.error(error.message || 'Failed to create goal');
     } finally {
       setIsLoading(false);
     }
@@ -68,7 +71,7 @@ export default function CreateGoalPage() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()}>
+          <TouchableOpacity onPress={handleBack}>
             <Ionicons name="arrow-back" size={24} color={Colors.textDark} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Create Goal</Text>
@@ -190,7 +193,7 @@ export default function CreateGoalPage() {
         <View style={styles.footer}>
           <Button
             label="Cancel"
-            onPress={() => router.back()}
+            onPress={handleBack}
             variant="ghost"
             fullWidth
             size="lg"

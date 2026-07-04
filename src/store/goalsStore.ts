@@ -44,8 +44,9 @@ export const useGoalsStore = create<GoalsState>((set) => ({
   fetchGoals: async () => {
     set({ isLoading: true, error: null });
     try {
-      const res = await api.get('/goals');
-      set({ goals: res.data.data || res.data, isLoading: false });
+      const res = await api.get('/goals/');
+      const data = res.data?.data ?? res.data?.results ?? res.data;
+      set({ goals: Array.isArray(data) ? data : [], isLoading: false });
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
     }
@@ -54,7 +55,7 @@ export const useGoalsStore = create<GoalsState>((set) => ({
   fetchGoal: async (id: string) => {
     set({ isLoading: true, error: null });
     try {
-      const res = await api.get(`/goals/${id}`);
+      const res = await api.get(`/goals/${id}/`);
       set({ currentGoal: res.data.data || res.data, isLoading: false });
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
@@ -64,7 +65,7 @@ export const useGoalsStore = create<GoalsState>((set) => ({
   createGoal: async (data: any) => {
     set({ isLoading: true, error: null });
     try {
-      const res = await api.post('/goals', data);
+      const res = await api.post('/goals/', data);
       const goal = res.data.data || res.data;
       set((state) => ({
         goals: [...state.goals, goal],

@@ -5,8 +5,8 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  SafeAreaView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Fonts, Spacing } from '../../src/constants/theme';
 import { useNotificationsStore } from '../../src/store/notificationsStore';
@@ -52,7 +52,7 @@ export default function ActivityScreen() {
     }
   };
 
-  const renderNotification = ({ item }) => (
+  const renderNotification = ({ item }: { item: import('../../src/store/notificationsStore').Notification }) => (
     <View style={styles.notificationItem}>
       <View style={[styles.iconContainer, { backgroundColor: getIconColor(item.type) + '20' }]}>
         <Ionicons name={getIconName(item.type)} size={24} color={getIconColor(item.type)} />

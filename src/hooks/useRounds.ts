@@ -1,6 +1,6 @@
 import { useCallback, useEffect } from 'react';
 import { useRoundsStore } from '../store/roundsStore';
-import { roundsService } from '../services/roundsService';
+import api from '../services/api';
 
 export function useRounds() {
   const { rounds, currentRound, isLoading, error, fetchRounds, fetchRound, createRound } =
@@ -11,38 +11,35 @@ export function useRounds() {
   }, [fetchRounds]);
 
   const getRound = useCallback(
-    (id: string) => {
-      return rounds.find((r) => r.id === id);
-    },
+    (id: string) => rounds.find((r) => r.id === id),
     [rounds]
   );
 
-  const recordPayment = useCallback(
-    async (roundId: string, amount: number, proofUrl?: string, note?: string) => {
-      try {
-        const response = await roundsService.recordPayment(roundId, {
-          amount,
-          proof_url: proofUrl,
-          note,
-        });
-        await fetchRound(roundId);
-        return response.data;
-      } catch (error) {
-        throw error;
-      }
+  // Submit proof of payment for a cycle
+  const submitProof = useCallback(
+    async (cycleId: string, formData: FormData) => {
+      const response = await api.post(`/payments/${cycleId}/payments`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      return response.data;
     },
-    [fetchRound]
+    []
   );
 
+  // Confirm a payment as recipient
+  const confirmPayment = useCallback(async (paymentId: string) => {
+    const response = await api.put(`/payments/${paymentId}/confirm`);
+    return response.data;
+  }, []);
+
+  // Dispute a payment
+  const disputePayment = useCallback(async (paymentId: string, reason: string) => {
+    const response = await api.put(`/payments/${paymentId}/dispute`, { reason });
+    return response.data;
+  }, []);
+
   const createNewRound = useCallback(
-    async (data: any) => {
-      try {
-        const newRound = await createRound(data);
-        return newRound;
-      } catch (error) {
-        throw error;
-      }
-    },
+    async (data: any) => createRound(data),
     [createRound]
   );
 
@@ -54,7 +51,9 @@ export function useRounds() {
     fetchRounds,
     fetchRound,
     getRound,
-    recordPayment,
+    submitProof,
+    confirmPayment,
+    disputePayment,
     createNewRound,
   };
 }
